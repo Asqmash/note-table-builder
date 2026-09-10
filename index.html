@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>note 表づくり — TeX / Gist 出力</title>
+<meta name="description" content="noteの記事に貼れる表を作るツール。ExcelやMarkdownの表を取り込んで、TeX（数式記法）とGist用Markdownを書き出します。KaTeXで崩れる日本語記号は自動で変換。">
+<meta property="og:type" content="website">
+<meta property="og:title" content="note 表づくり — TeX / Gist 出力">
+<meta property="og:description" content="noteの記事に貼れる表を作るツール。ExcelやMarkdownの表を取り込んで、TeX（数式記法）とGist用Markdownを書き出します。KaTeXで崩れる日本語記号は自動で変換。">
+<meta name="twitter:card" content="summary">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<style>
+  :root{
+    --ink:#17211f;
+    --ink-2:#4a5754;
+    --ink-3:#7b8784;
+    --paper:#ffffff;
+    --surface:#eef1f0;
+    --surface-2:#f7f9f8;
+    --line:#cfd8d5;
+    --line-soft:#e3e9e7;
+    --accent:#1f8f7e;
+    --accent-soft:#e0f0ec;
+    --alert:#9c5324;
+    --alert-soft:#fbf0e6;
+    --sans:"Hiragino Sans","Hiragino Kaku Gothic ProN","BIZ UDPGothic","Yu Gothic","Noto Sans JP",system-ui,sans-serif;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Hiragino Sans",monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--surface);
+    color:var(--ink);
+    font-family:var(--sans);
+    font-size:15px;
+    line-height:1.7;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1240px;margin:0 auto;padding:28px 20px 72px}
+
+  header.top{margin-bottom:26px}
+  header.top h1{
+    font-size:22px;font-weight:700;letter-spacing:.02em;margin:0 0 6px;
+  }
+  header.top p{margin:0;color:var(--ink-2);font-size:13.5px;max-width:62ch}
+
+  .cols{display:grid;grid-template-columns:1.08fr 1fr;gap:22px;align-items:start}
+  @media (max-width:960px){.cols{grid-template-columns:1fr}}
+
+  .panel{background:var(--paper);border:1px solid var(--line);border-radius:4px}
+  .panel-hd{
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    padding:10px 14px;border-bottom:1px solid var(--line-soft);
+  }
+  .panel-hd h2{margin:0;font-size:13px;font-weight:700;letter-spacing:.04em;color:var(--ink)}
+  .panel-bd{padding:14px}
+
+  button{font-family:inherit;font-size:13px;line-height:1.4;cursor:pointer}
+  .btn{
+    border:1px solid var(--line);background:var(--paper);color:var(--ink);
+    border-radius:3px;padding:5px 11px;
+  }
+  .btn:hover{background:var(--surface-2);border-color:var(--ink-3)}
+  .btn:active{background:var(--surface)}
+  .btn-primary{
+    border:1px solid var(--accent);background:var(--accent);color:#fff;font-weight:600;
+    border-radius:3px;padding:6px 14px;
+  }
+  .btn-primary:hover{background:#187667;border-color:#187667}
+  .btn-primary.done{background:var(--ink);border-color:var(--ink)}
+  .btn-quiet{
+    border:1px solid transparent;background:transparent;color:var(--ink-3);
+    border-radius:3px;padding:2px 6px;font-size:12px;
+  }
+  .btn-quiet:hover{color:var(--alert);background:var(--alert-soft)}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+
+  .toolbar{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+  .toolbar .sep{flex:1}
+
+  .grid-scroll{overflow-x:auto;padding-bottom:2px}
+  table.grid{border-collapse:collapse;width:100%}
+  table.grid th,table.grid td{padding:0;border:1px solid var(--line-soft);vertical-align:top}
+  table.grid td.cell{background:var(--paper)}
+  table.grid tr.headrow td.cell{background:var(--surface-2)}
+  .cell textarea{
+    display:block;width:100%;min-width:110px;border:0;outline:0;resize:none;overflow:hidden;
+    background:transparent;font-family:inherit;font-size:14px;line-height:1.55;
+    padding:7px 8px;color:var(--ink);
+  }
+  tr.headrow .cell textarea{font-weight:700}
+  .cell:focus-within{box-shadow:inset 0 0 0 2px var(--accent)}
+  .ctl{width:30px;background:var(--surface-2);text-align:center;border:1px solid var(--line-soft)}
+  .ctl-top{background:var(--surface-2);padding:3px 4px !important;text-align:center}
+  .ctl-top select{
+    font-family:inherit;font-size:11.5px;border:1px solid var(--line);border-radius:2px;
+    background:var(--paper);color:var(--ink-2);padding:1px 2px;width:100%;max-width:64px;
+  }
+  .corner{background:var(--surface-2)}
+
+  .opts{display:grid;grid-template-columns:1fr 1fr;gap:10px 18px;margin-top:16px;padding-top:14px;border-top:1px solid var(--line-soft)}
+  @media (max-width:520px){.opts{grid-template-columns:1fr}}
+  .opt{font-size:13px;color:var(--ink-2)}
+  .opt label{display:flex;align-items:center;gap:7px;cursor:pointer}
+  .opt select{
+    font-family:inherit;font-size:13px;padding:3px 6px;border:1px solid var(--line);
+    border-radius:3px;background:var(--paper);color:var(--ink)
+  }
+  .opt input[type=range]{width:96px;vertical-align:middle;accent-color:var(--accent)}
+  .opt input[type=checkbox]{accent-color:var(--accent);width:15px;height:15px}
+  .opt .hint{display:block;font-size:11.5px;color:var(--ink-3);margin-left:22px;line-height:1.5}
+
+  .tabs{display:flex;gap:0;border-bottom:1px solid var(--line-soft);overflow-x:auto}
+  .tab{
+    border:0;background:transparent;padding:9px 12px;font-size:12.5px;color:var(--ink-3);
+    border-bottom:2px solid transparent;white-space:nowrap;font-weight:600;
+  }
+  .tab:hover{color:var(--ink)}
+  .tab[aria-selected=true]{color:var(--ink);border-bottom-color:var(--accent)}
+
+  .out{
+    width:100%;min-height:184px;border:1px solid var(--line);border-radius:3px;
+    background:var(--surface-2);color:var(--ink);font-family:var(--mono);font-size:12.5px;
+    line-height:1.65;padding:10px;resize:vertical;white-space:pre;overflow:auto;
+  }
+  .out-foot{display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap}
+  .count{font-size:12px;color:var(--ink-3);font-family:var(--mono)}
+  .howto{font-size:12.5px;color:var(--ink-2);margin:0 0 10px;line-height:1.65}
+  .howto code{font-family:var(--mono);font-size:12px;background:var(--surface);padding:1px 4px;border-radius:2px}
+
+  .preview{
+    border:1px solid var(--line);border-radius:3px;background:var(--paper);
+    padding:16px 12px;overflow-x:auto;min-height:70px;
+  }
+  .preview .katex-display{margin:0}
+  .preview.err{color:var(--alert);font-size:13px;font-family:var(--mono);white-space:pre-wrap}
+
+  .warn{
+    margin-top:12px;border-left:3px solid var(--alert);background:var(--alert-soft);
+    padding:9px 12px;font-size:12.5px;color:var(--alert);line-height:1.6;border-radius:0 3px 3px 0;
+  }
+  .warn b{font-weight:700}
+  .warn .chars{font-family:var(--mono);font-size:13px;letter-spacing:.08em}
+
+  details.guide{margin-top:22px;background:var(--paper);border:1px solid var(--line);border-radius:4px}
+  details.guide>summary{
+    padding:11px 14px;cursor:pointer;font-size:13px;font-weight:700;list-style:none;
+  }
+  details.guide>summary::-webkit-details-marker{display:none}
+  details.guide>summary::before{content:"＋ ";color:var(--accent)}
+  details.guide[open]>summary::before{content:"− ";color:var(--accent)}
+  .guide-bd{padding:0 18px 18px;font-size:13.5px;color:var(--ink-2);max-width:76ch}
+  .guide-bd h3{font-size:13.5px;color:var(--ink);margin:16px 0 6px}
+  .guide-bd ol,.guide-bd ul{margin:6px 0;padding-left:1.4em}
+  .guide-bd li{margin:3px 0}
+  .guide-bd code{font-family:var(--mono);font-size:12.5px;background:var(--surface);padding:1px 5px;border-radius:2px}
+  .guide-bd table{border-collapse:collapse;margin:10px 0;font-size:12.5px}
+  .guide-bd th,.guide-bd td{border:1px solid var(--line);padding:5px 9px;text-align:left}
+  .guide-bd th{background:var(--surface-2);font-weight:700}
+
+  .import-area{
+    width:100%;height:110px;border:1px solid var(--line);border-radius:3px;padding:9px;
+    font-family:var(--mono);font-size:12.5px;background:var(--surface-2);resize:vertical;
+  }
+  .import-note{font-size:12px;color:var(--ink-3);margin:6px 0 8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <h1>note 表づくり</h1>
+  <p>表を組んで、noteにそのまま貼れる形で書き出します。TeX（数式記法）なら記事本文にテキストとして残るので、記事内検索でも引っかかります。</p>
+</header>
+
+<div class="cols">
+
+  <!-- ================= 左：グリッド ================= -->
+  <section class="panel">
+    <div class="panel-hd">
+      <h2>表を組む</h2>
+      <span class="count" id="dims"></span>
+    </div>
+    <div class="panel-bd">
+
+      <div class="toolbar">
+        <button class="btn" id="addRow">行を追加</button>
+        <button class="btn" id="addCol">列を追加</button>
+        <span class="sep"></span>
+        <button class="btn" id="clearAll">空にする</button>
+      </div>
+
+      <div class="grid-scroll">
+        <table class="grid" id="grid"></table>
+      </div>
+
+      <details style="margin-top:14px">
+        <summary style="font-size:12.5px;color:var(--ink-2);cursor:pointer">Excel・スプレッドシート・Markdownの表を取り込む</summary>
+        <p class="import-note">セルに直接貼り付けても取り込めます（そのセルを左上として展開）。ここに貼る場合は表全体を置き換えます。</p>
+        <textarea class="import-area" id="importBox" placeholder="Excelからコピーした範囲、CSV、またはMarkdownの表をそのまま貼り付け"></textarea>
+        <div style="margin-top:8px"><button class="btn" id="importBtn">取り込む</button></div>
+      </details>
+
+      <div class="opts">
+        <div class="opt">
+          <label><input type="checkbox" id="optHeader" checked> 1行目を見出しにする</label>
+          <span class="hint">TeXでは太字、Markdownでは見出し行になります</span>
+        </div>
+        <div class="opt">
+          <label>罫線
+            <select id="optBorder">
+              <option value="all">すべて引く</option>
+              <option value="rows">横線だけ</option>
+              <option value="head">見出しの下だけ</option>
+              <option value="none">引かない</option>
+            </select>
+          </label>
+          <span class="hint" style="margin-left:0">TeX出力にのみ効きます</span>
+        </div>
+        <div class="opt">
+          <label>行の高さ <input type="range" id="optStretch" min="1" max="2.2" step="0.1" value="1.4"> <span class="count" id="stretchVal">1.4</span></label>
+          <span class="hint" style="margin-left:0">KaTeXの標準は詰まって見えるので、少し広げるのがおすすめ</span>
+        </div>
+        <div class="opt">
+          <label><input type="checkbox" id="optSymbols" checked> 記号をKaTeXの書き方に置き換える</label>
+          <span class="hint">○ × → ※ ① などはそのままだと崩れます</span>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ================= 右：出力 ================= -->
+  <section class="panel">
+    <div class="panel-hd">
+      <h2>書き出す</h2>
+    </div>
+    <div class="tabs" id="tabs" role="tablist">
+      <button class="tab" role="tab" data-fmt="tex" aria-selected="true">TeX（複数行）</button>
+      <button class="tab" role="tab" data-fmt="texline" aria-selected="false">TeX（1行）</button>
+      <button class="tab" role="tab" data-fmt="md" aria-selected="false">Markdown（Gist用）</button>
+      <button class="tab" role="tab" data-fmt="tsv" aria-selected="false">TSV</button>
+    </div>
+    <div class="panel-bd">
+      <p class="howto" id="howto"></p>
+      <textarea class="out" id="out" readonly spellcheck="false"></textarea>
+      <div class="out-foot">
+        <button class="btn-primary" id="copyBtn">コピー</button>
+        <span class="count" id="chars"></span>
+      </div>
+
+      <div id="warnBox"></div>
+
+      <div style="margin-top:18px">
+        <div class="panel-hd" style="padding:0 0 8px;border:0">
+          <h2>表示イメージ</h2>
+          <span class="count">noteと同じKaTeXで描画</span>
+        </div>
+        <div class="preview" id="preview"></div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<details class="guide">
+  <summary>noteへの貼り方と、TeX / Gist の使い分け</summary>
+  <div class="guide-bd">
+
+    <h3>TeXで入れる（推奨）</h3>
+    <ol>
+      <li>note の編集画面で新しい段落を作る</li>
+      <li>「TeX（複数行）」をコピーし、<code>$$</code> の行から <code>$$</code> の行までをそのまま貼る</li>
+      <li>貼った直後に段落が分かれてしまった場合は「TeX（1行）」を使う。こちらはインライン数式なので1行で完結し、貼り付けで崩れません</li>
+      <li><code>$$</code> と <code>$$</code> の間にカーソルを置くとプレビューが出ます</li>
+    </ol>
+    <p>本文中のテキストとして残るため、記事内検索・ブラウザのCtrl+Fで拾えます。iOSアプリでは数式記法が正しく動かない場合がある、とnote側が案内しています。</p>
+
+    <h3>Gistで入れる</h3>
+    <ol>
+      <li>「Markdown（Gist用）」をコピー</li>
+      <li>GitHubのGistで新規作成。ファイル名の拡張子を <code>.md</code> にする（ここが重要。<code>.txt</code> だとただのテキストとして表示されます）</li>
+      <li>Create public gist で公開し、そのURLをnoteの本文に貼る</li>
+    </ol>
+    <p>埋め込みはiframeなので、中の文字はnoteの記事内検索やページ内検索では拾えません。表の見た目はきれいですが、テキストとして参照させたいならTeXのほうが目的に合います。</p>
+
+    <h3>使い分けの目安</h3>
+    <table>
+      <tr><th></th><th>TeX</th><th>Gist</th><th>画像</th></tr>
+      <tr><th>記事内検索</th><td>拾える</td><td>拾えない</td><td>拾えない</td></tr>
+      <tr><th>コピー</th><td>できる（やや崩れる）</td><td>できる</td><td>できない</td></tr>
+      <tr><th>あとで直す</th><td>本文を直せる</td><td>Gist側を直すと反映</td><td>作り直し</td></tr>
+      <tr><th>外部依存</th><td>なし</td><td>GitHubに依存</td><td>なし</td></tr>
+    </table>
+
+    <h3>記号の置き換えについて</h3>
+    <p>KaTeXは <code>○ ● △ ★ ※ → × ± ≠ ① ℃</code> などの文字を素のままでは正しく組めません。「記号をKaTeXの書き方に置き換える」を有効にすると、<code>○</code> を <code>\bigcirc</code>、<code>①</code> を <code>\textcircled{1}</code> のように自動で書き換えます。置き換え先が無い文字（絵文字、㈱、№ など）は警告に出るので、別の表記に変えてください。</p>
+
+    <h3>セル内の改行</h3>
+    <p>セルの中で改行すると、TeXでは入れ子の配列、Markdownでは <code>&lt;br&gt;</code> になります。</p>
+
+  </div>
+</details>
+
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ---------- state ---------- */
+var S = {
+  rows: [
+    ["項目","内容","備考"],
+    ["検知","EDRアラート","重大度 高"],
+    ["対応","端末の隔離","15分以内"]
+  ],
+  align: ["l","l","l"],
+  header: true,
+  border: "all",
+  stretch: 1.4,
+  symbols: true,
+  fmt: "tex"
+};
+
+/* ---------- symbol maps ---------- */
+var MATH = {
+  "※":"\\ast","→":"\\rightarrow","←":"\\leftarrow","↑":"\\uparrow","↓":"\\downarrow",
+  "⇒":"\\Rightarrow","⇐":"\\Leftarrow","⇔":"\\Leftrightarrow","↔":"\\leftrightarrow",
+  "✓":"\\checkmark","✔":"\\checkmark","✕":"\\times","✖":"\\times","✗":"\\times",
+  "○":"\\bigcirc","◯":"\\bigcirc","●":"\\bullet","◎":"\\circledcirc",
+  "△":"\\triangle","▲":"\\blacktriangle","▽":"\\triangledown","▼":"\\blacktriangledown",
+  "□":"\\square","■":"\\blacksquare","◇":"\\diamond","◆":"\\blacklozenge",
+  "★":"\\bigstar","☆":"\\star","♪":"\\flat",
+  "†":"\\dagger","‡":"\\ddagger","§":"\\S","¶":"\\P",
+  "±":"\\pm","×":"\\times","÷":"\\div","≠":"\\neq","≒":"\\fallingdotseq",
+  "≦":"\\leqq","≧":"\\geqq","≤":"\\le","≥":"\\ge","＜":"\\lt","＞":"\\gt",
+  "∞":"\\infty","√":"\\surd","∴":"\\therefore","∵":"\\because",
+  "∈":"\\in","⊂":"\\subset","∩":"\\cap","∪":"\\cup","°":"\\degree",
+  "℃":"{}^\\circ\\text{C}","℉":"{}^\\circ\\text{F}"
+};
+/* KaTeXが text モードで解析エラーになる文字。トグルに関係なく必ず置き換える */
+var HARD = {
+  "\u2028":" ","\u2029":" ","‼":"!!",
+  "ℋ":"$\\mathcal{H}$","ℌ":"$\\mathfrak{H}$","ℐ":"$\\mathcal{I}$","ℒ":"$\\mathcal{L}$",
+  "ℛ":"$\\mathcal{R}$","ℨ":"$\\mathfrak{Z}$","ℬ":"$\\mathcal{B}$","ℭ":"$\\mathfrak{C}$",
+  "ℰ":"$\\mathcal{E}$","ℱ":"$\\mathcal{F}$","ℳ":"$\\mathcal{M}$",
+  "↤":"$\\leftarrow$","∉":"$\\notin$","∌":"$\\not\\ni$","∏":"$\\prod$","∐":"$\\coprod$",
+  "∑":"$\\sum$","∫":"$\\int$","∬":"$\\iint$","∭":"$\\iiint$","∮":"$\\oint$",
+  "∯":"$\\oiint$","∰":"$\\oiiint$","∷":"::","∹":"-:","≔":"$\\coloneqq$","≕":"$\\eqqcolon$",
+  "≘":"$\\hat{=}$","≙":"$\\hat{=}$","≚":"$\\hat{=}$","≛":"$\\overset{\\star}{=}$",
+  "≝":"$\\overset{\\mathrm{def}}{=}$","≞":"$\\overset{m}{=}$","≟":"$\\overset{?}{=}$",
+  "≠":"$\\neq$","⋀":"$\\bigwedge$","⋁":"$\\bigvee$","⋂":"$\\bigcap$","⋃":"$\\bigcup$"
+};
+var PLAIN = {
+  "№":"No.","㈱":"(株)","㈲":"(有)","―":"-","‐":"-","–":"-","—":"-",
+  "Ⅰ":"I","Ⅱ":"II","Ⅲ":"III","Ⅳ":"IV","Ⅴ":"V","Ⅵ":"VI","Ⅶ":"VII","Ⅷ":"VIII","Ⅸ":"IX","Ⅹ":"X"
+};
+// ①〜⑳ → \textcircled{n}
+function circled(ch){
+  var c = ch.codePointAt(0);
+  if (c >= 0x2460 && c <= 0x2473) return "\\textcircled{" + (c - 0x2460 + 1) + "}";
+  return null;
+}
+// KaTeXが持っていない可能性が高い文字（警告用）
+function isRisky(ch){
+  var c = ch.codePointAt(0);
+  if (c < 0x00a0) return false;
+  if (c >= 0x3000 && c <= 0x30ff) return false;   // 和文約物・かな
+  if (c >= 0x3400 && c <= 0x9fff) return false;   // 漢字
+  if (c >= 0xf900 && c <= 0xfaff) return false;
+  if (c >= 0xff00 && c <= 0xffef) return false;   // 全角英数・半角カナ
+  if (c === 0x00b7) return false;
+  if (c >= 0x00c0 && c <= 0x024f) return false;   // ラテン拡張
+  return true;
+}
+
+/* ---------- TeX ---------- */
+var ESC = {"\\":"\\textbackslash{}","{":"\\{","}":"\\}","$":"\\$","&":"\\&",
+           "%":"\\%","#":"\\#","_":"\\_","^":"\\textasciicircum{}","~":"\\textasciitilde{}"};
+
+function texLine(str, bold){
+  var out = "", buf = "";
+  var wrap = bold ? "\\textbf{" : "\\text{";
+  function flush(){ if(buf){ out += wrap + buf + "}"; buf = ""; } }
+  Array.from(str).forEach(function(ch){
+    if (HARD[ch] !== undefined) { buf += HARD[ch]; return; }
+    if (S.symbols) {
+      var m = MATH[ch];
+      if (m) { buf += "$" + m + "$"; return; }
+      var cc = circled(ch);
+      if (cc) { buf += cc; return; }
+      var p = PLAIN[ch];
+      if (p) { buf += p; return; }
+    }
+    buf += ESC[ch] !== undefined ? ESC[ch] : ch;
+  });
+  flush();
+  return out || "\\text{}";
+}
+
+function texCell(str, bold, align){
+  var lines = String(str).split("\n");
+  if (lines.length === 1) return texLine(lines[0], bold);
+  return "\\begin{array}{" + align + "}" +
+         lines.map(function(l){ return texLine(l, bold); }).join(" \\\\ ") +
+         "\\end{array}";
+}
+
+function buildTex(oneLine){
+  var cols = S.align.length;
+  var pipe = (S.border === "all");
+  var spec = pipe ? "|" + S.align.join("|") + "|" : S.align.join("");
+  var body = [];
+  var top = (S.border === "all" || S.border === "rows" || S.border === "head");
+
+  S.rows.forEach(function(row, r){
+    var isHead = S.header && r === 0;
+    var cells = [];
+    for (var c = 0; c < cols; c++){
+      cells.push(texCell(row[c] === undefined ? "" : row[c], isHead, S.align[c]));
+    }
+    var line = cells.join(" & ") + " \\\\";
+    var rule = "";
+    if (S.border === "all" || S.border === "rows") rule = " \\hline";
+    else if (S.border === "head" && isHead) rule = " \\hline";
+    body.push(line + rule);
+  });
+
+  var head = "\\def\\arraystretch{" + S.stretch.toFixed(1) + "}\\begin{array}{" + spec + "}";
+  var open = top ? "\\hline" : "";
+
+  if (oneLine){
+    return "$${" + head + open + " " + body.join(" ") + " \\end{array}}$$";
+  }
+  var lines = ["$$", head, open].filter(Boolean);
+  return lines.concat(body, ["\\end{array}", "$$"]).join("\n");
+}
+
+/* 生のTeX本体（プレビュー用・$$なし） */
+function buildTexRaw(){
+  var t = buildTex(true);
+  return t.slice(3, -3); // $${ ... }$$
+}
+
+/* ---------- Markdown ---------- */
+function mdCell(s){
+  return String(s).replace(/\|/g, "\\|").split("\n").join("<br>");
+}
+function buildMd(){
+  var cols = S.align.length;
+  var rows = S.rows.slice();
+  var lines = [];
+  var head = S.header ? rows.shift() : new Array(cols).fill("");
+  var cells = [];
+  for (var c = 0; c < cols; c++) cells.push(mdCell(head[c] === undefined ? "" : head[c]));
+  lines.push("| " + cells.join(" | ") + " |");
+  lines.push("|" + S.align.map(function(a){
+    return a === "c" ? " :---: " : a === "r" ? " ---: " : " :--- ";
+  }).join("|") + "|");
+  rows.forEach(function(row){
+    var cs = [];
+    for (var c = 0; c < cols; c++) cs.push(mdCell(row[c] === undefined ? "" : row[c]));
+    lines.push("| " + cs.join(" | ") + " |");
+  });
+  return lines.join("\n");
+}
+
+/* ---------- TSV ---------- */
+function buildTsv(){
+  return S.rows.map(function(row){
+    return row.map(function(v){
+      v = v === undefined ? "" : String(v);
+      return /[\t\n"]/.test(v) ? '"' + v.replace(/"/g,'""') + '"' : v;
+    }).join("\t");
+  }).join("\n");
+}
+
+/* ---------- import ---------- */
+function parseTable(text){
+  text = text.replace(/\r\n?/g, "\n").replace(/\n+$/,"");
+  if (!text.trim()) return null;
+  var lines = text.split("\n");
+
+  // Markdown table?
+  var isMd = lines.length >= 2 &&
+             lines.slice(0,3).some(function(l){ return /^\s*\|?[\s:\-\|]+\|[\s:\-\|]*$/.test(l) && l.indexOf("-") >= 0; });
+  if (isMd){
+    var align = null, rows = [];
+    lines.forEach(function(l){
+      if (!l.trim()) return;
+      var cells = l.replace(/^\s*\|/,"").replace(/\|\s*$/,"").split("|").map(function(c){
+        return c.trim().replace(/\\\|/g,"|").replace(/<br\s*\/?>/gi,"\n");
+      });
+      if (/^[\s:\-]+$/.test(cells.join(""))){
+        align = cells.map(function(c){
+          c = c.trim();
+          if (/^:.*:$/.test(c)) return "c";
+          if (/:$/.test(c)) return "r";
+          return "l";
+        });
+        return;
+      }
+      rows.push(cells);
+    });
+    if (rows.length) return { rows: rows, align: align };
+  }
+
+  var sep = text.indexOf("\t") >= 0 ? "\t" : (text.indexOf(",") >= 0 ? "," : "\t");
+  var rows2 = [], cur = [], field = "", q = false;
+  for (var i = 0; i < text.length; i++){
+    var ch = text[i];
+    if (q){
+      if (ch === '"'){ if (text[i+1] === '"'){ field += '"'; i++; } else q = false; }
+      else field += ch;
+    } else if (ch === '"' && field === ""){ q = true; }
+    else if (ch === sep){ cur.push(field); field = ""; }
+    else if (ch === "\n"){ cur.push(field); rows2.push(cur); cur = []; field = ""; }
+    else field += ch;
+  }
+  cur.push(field); rows2.push(cur);
+  return { rows: rows2, align: null };
+}
+
+function applyTable(parsed, atR, atC){
+  var rows = parsed.rows;
+  var width = 0;
+  rows.forEach(function(r){ width = Math.max(width, r.length); });
+  if (atR === undefined){
+    S.rows = rows.map(function(r){
+      var out = [];
+      for (var i = 0; i < width; i++) out.push(r[i] === undefined ? "" : r[i]);
+      return out;
+    });
+    S.align = parsed.align && parsed.align.length === width
+      ? parsed.align
+      : new Array(width).fill("l");
+  } else {
+    var needCols = atC + width;
+    var needRows = atR + rows.length;
+    while (S.align.length < needCols) S.align.push("l");
+    while (S.rows.length < needRows) S.rows.push(new Array(S.align.length).fill(""));
+    S.rows.forEach(function(r){ while (r.length < S.align.length) r.push(""); });
+    rows.forEach(function(r, ri){
+      r.forEach(function(v, ci){ S.rows[atR+ri][atC+ci] = v; });
+    });
+  }
+  renderGrid(); update();
+}
+
+/* ---------- grid render ---------- */
+var gridEl = document.getElementById("grid");
+
+function autoSize(ta){
+  ta.style.height = "auto";
+  ta.style.height = Math.max(30, ta.scrollHeight) + "px";
+}
+
+function renderGrid(){
+  var cols = S.align.length;
+  var html = "";
+
+  html += "<tr><td class='corner'></td>";
+  for (var c = 0; c < cols; c++){
+    html += "<td class='ctl-top'><select data-col='" + c + "' class='alignSel' title='列の揃え'>" +
+            "<option value='l'" + (S.align[c]==="l"?" selected":"") + ">左</option>" +
+            "<option value='c'" + (S.align[c]==="c"?" selected":"") + ">中央</option>" +
+            "<option value='r'" + (S.align[c]==="r"?" selected":"") + ">右</option>" +
+            "</select></td>";
+  }
+  html += "<td class='corner'></td></tr>";
+
+  html += "<tr><td class='corner'></td>";
+  for (var c2 = 0; c2 < cols; c2++){
+    html += "<td class='ctl-top'><button class='btn-quiet delCol' data-col='" + c2 + "' title='この列を削除'>列を削除</button></td>";
+  }
+  html += "<td class='corner'></td></tr>";
+
+  S.rows.forEach(function(row, r){
+    var cls = (S.header && r === 0) ? " class='headrow'" : "";
+    html += "<tr" + cls + "><td class='ctl'></td>";
+    for (var c = 0; c < cols; c++){
+      var v = row[c] === undefined ? "" : row[c];
+      html += "<td class='cell'><textarea rows='1' data-r='" + r + "' data-c='" + c + "'>" +
+              v.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") + "</textarea></td>";
+    }
+    html += "<td class='ctl'><button class='btn-quiet delRow' data-row='" + r + "' title='この行を削除'>×</button></td></tr>";
+  });
+
+  gridEl.innerHTML = html;
+  Array.prototype.forEach.call(gridEl.querySelectorAll("textarea"), autoSize);
+  document.getElementById("dims").textContent = S.rows.length + "行 × " + cols + "列";
+}
+
+gridEl.addEventListener("input", function(e){
+  var t = e.target;
+  if (t.tagName !== "TEXTAREA") return;
+  S.rows[+t.dataset.r][+t.dataset.c] = t.value;
+  autoSize(t);
+  update();
+});
+
+gridEl.addEventListener("change", function(e){
+  if (e.target.classList.contains("alignSel")){
+    S.align[+e.target.dataset.col] = e.target.value;
+    update();
+  }
+});
+
+gridEl.addEventListener("click", function(e){
+  var b = e.target.closest("button");
+  if (!b) return;
+  if (b.classList.contains("delRow")){
+    if (S.rows.length <= 1) return;
+    S.rows.splice(+b.dataset.row, 1);
+    renderGrid(); update();
+  }
+  if (b.classList.contains("delCol")){
+    if (S.align.length <= 1) return;
+    var c = +b.dataset.col;
+    S.align.splice(c, 1);
+    S.rows.forEach(function(r){ r.splice(c, 1); });
+    renderGrid(); update();
+  }
+});
+
+gridEl.addEventListener("paste", function(e){
+  var t = e.target;
+  if (t.tagName !== "TEXTAREA") return;
+  var txt = (e.clipboardData || window.clipboardData).getData("text");
+  if (!txt || (txt.indexOf("\t") < 0 && txt.indexOf("\n") < 0)) return;
+  e.preventDefault();
+  var parsed = parseTable(txt);
+  if (parsed) applyTable(parsed, +t.dataset.r, +t.dataset.c);
+});
+
+/* ---------- controls ---------- */
+document.getElementById("addRow").onclick = function(){
+  S.rows.push(new Array(S.align.length).fill(""));
+  renderGrid(); update();
+};
+document.getElementById("addCol").onclick = function(){
+  S.align.push("l");
+  S.rows.forEach(function(r){ r.push(""); });
+  renderGrid(); update();
+};
+document.getElementById("clearAll").onclick = function(){
+  S.rows = S.rows.map(function(r){ return r.map(function(){ return ""; }); });
+  renderGrid(); update();
+};
+document.getElementById("importBtn").onclick = function(){
+  var box = document.getElementById("importBox");
+  var parsed = parseTable(box.value);
+  if (!parsed){ box.focus(); return; }
+  applyTable(parsed);
+  box.value = "";
+};
+
+document.getElementById("optHeader").onchange = function(){ S.header = this.checked; renderGrid(); update(); };
+document.getElementById("optBorder").onchange = function(){ S.border = this.value; update(); };
+document.getElementById("optSymbols").onchange = function(){ S.symbols = this.checked; update(); };
+document.getElementById("optStretch").oninput = function(){
+  S.stretch = parseFloat(this.value);
+  document.getElementById("stretchVal").textContent = S.stretch.toFixed(1);
+  update();
+};
+
+document.getElementById("tabs").addEventListener("click", function(e){
+  var t = e.target.closest(".tab");
+  if (!t) return;
+  S.fmt = t.dataset.fmt;
+  Array.prototype.forEach.call(this.querySelectorAll(".tab"), function(b){
+    b.setAttribute("aria-selected", String(b === t));
+  });
+  update();
+});
+
+var copyBtn = document.getElementById("copyBtn");
+copyBtn.onclick = function(){
+  var out = document.getElementById("out");
+  out.select();
+  var ok = false;
+  try { ok = document.execCommand("copy"); } catch(err){}
+  if (navigator.clipboard && !ok){
+    navigator.clipboard.writeText(out.value).catch(function(){});
+    ok = true;
+  }
+  window.getSelection().removeAllRanges();
+  copyBtn.textContent = ok ? "コピーしました" : "選択しました";
+  copyBtn.classList.add("done");
+  setTimeout(function(){ copyBtn.textContent = "コピー"; copyBtn.classList.remove("done"); }, 1600);
+};
+
+/* ---------- update ---------- */
+var HOWTO = {
+  tex: "noteで新しい段落を作り、そのまま貼り付けます。段落が分かれてしまうときは「TeX（1行）」へ。",
+  texline: "インライン数式なので1行で完結します。貼り付けで段落が崩れる環境ではこちら。",
+  md: "GitHubのGistに <code>.md</code> 拡張子で保存し、そのURLをnoteに貼ります。",
+  tsv: "Excelやスプレッドシートに貼り戻すためのデータです。"
+};
+
+function collectRisky(){
+  var seen = {}, list = [];
+  S.rows.forEach(function(row){
+    row.forEach(function(v){
+      Array.from(String(v || "")).forEach(function(ch){
+        if (!isRisky(ch)) return;
+        if (HARD[ch] !== undefined) return;
+        if (S.symbols && (MATH[ch] || PLAIN[ch] || circled(ch))) return;
+        if (seen[ch]) return;
+        seen[ch] = 1; list.push(ch);
+      });
+    });
+  });
+  return list;
+}
+
+function update(){
+  var out = document.getElementById("out");
+  var text = S.fmt === "tex" ? buildTex(false)
+           : S.fmt === "texline" ? buildTex(true)
+           : S.fmt === "md" ? buildMd()
+           : buildTsv();
+  out.value = text;
+  document.getElementById("chars").textContent = text.length + " 文字";
+  document.getElementById("howto").innerHTML = HOWTO[S.fmt];
+
+  // preview
+  var pv = document.getElementById("preview");
+  if (window.katex){
+    try {
+      pv.className = "preview";
+      katex.render(buildTexRaw(), pv, { displayMode:true, throwOnError:true, strict:"ignore" });
+    } catch(err){
+      pv.className = "preview err";
+      pv.textContent = "この内容はKaTeXで組めませんでした。\n" + err.message;
+    }
+  }
+
+  // warnings
+  var wb = document.getElementById("warnBox");
+  var risky = collectRisky();
+  var msgs = [];
+  if (risky.length){
+    msgs.push("<b>KaTeXが持っていない文字があります。</b> TeXで貼ると位置がずれたり表示されないことがあります： " +
+              "<span class='chars'>" + risky.slice(0,24).map(function(c){
+                return c.replace(/&/g,"&amp;").replace(/</g,"&lt;");
+              }).join(" ") + "</span>" +
+              (S.symbols ? "" : "<br>「記号をKaTeXの書き方に置き換える」を入れると一部は自動で直ります。"));
+  }
+  wb.innerHTML = msgs.length ? "<div class='warn'>" + msgs.join("</div><div class='warn'>") + "</div>" : "";
+}
+
+/* ---------- boot ---------- */
+renderGrid();
+update();
+if (window.katex) update();
+else window.addEventListener("load", function(){ setTimeout(update, 60); });
+
+})();
+</script>
+</body>
+</html>
