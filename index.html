@@ -298,6 +298,10 @@
     <h3>記号の置き換えについて</h3>
     <p>KaTeXは <code>○ ● △ ★ ※ → × ± ≠ ① ℃</code> などの文字を素のままでは正しく組めません。「記号をKaTeXの書き方に置き換える」を有効にすると、<code>○</code> を <code>\bigcirc</code>、<code>①</code> を <code>\textcircled{1}</code> のように自動で書き換えます。置き換え先が無い文字（絵文字、㈱、№ など）は警告に出るので、別の表記に変えてください。</p>
 
+    <h3>行区切りが <code>\cr</code> になっている理由</h3>
+    <p>TeXの表は普通 <code>\\</code> で行を区切りますが、noteのエディタは貼り付けたテキストの「バックスラッシュ＋記号」をMarkdownのエスケープとして処理してしまい、<code>\\</code> が <code>\</code> に潰れます。そうなると行が区切られず、表になりません。</p>
+    <p>同じ理由で <code>\&amp;</code> <code>\%</code> <code>\#</code> <code>\$</code> <code>\_</code> <code>\{</code> <code>\}</code> も壊れるため、このツールは <code>\cr</code> や <code>\char38{}</code> のように、バックスラッシュのあとが英数字だけになる書き方で出力しています。見た目の結果は同じです。</p>
+
     <h3>セル内の改行</h3>
     <p>セルの中で改行すると、TeXでは入れ子の配列、Markdownでは <code>&lt;br&gt;</code> になります。</p>
 
@@ -378,8 +382,14 @@ function isRisky(ch){
 }
 
 /* ---------- TeX ---------- */
-var ESC = {"\\":"\\textbackslash{}","{":"\\{","}":"\\}","$":"\\$","&":"\\&",
-           "%":"\\%","#":"\\#","_":"\\_","^":"\\textasciicircum{}","~":"\\textasciitilde{}"};
+/* noteのエディタは貼り付け時に「バックスラッシュ + 記号」を食う（Markdownの
+   エスケープ解釈）。\& \% \# \$ \_ \{ \} \\ は全部バックスラッシュが消えて壊れる。
+   なのでバックスラッシュ+英字だけで書けるコマンドに置き換える。 */
+var ESC = {"\\":"\\textbackslash{}","{":"\\textbraceleft{}","}":"\\textbraceright{}",
+           "$":"\\textdollar{}","&":"\\char38{}","%":"\\char37{}","#":"\\char35{}",
+           "_":"\\textunderscore{}","^":"\\textasciicircum{}","~":"\\textasciitilde{}"};
+/* 同じ理由で、行区切りは \\ ではなく \cr を使う（KaTeXでは等価） */
+var ROWSEP = "\\cr";
 
 function texLine(str, bold){
   var out = "", buf = "";
@@ -405,7 +415,7 @@ function texCell(str, bold, align){
   var lines = String(str).split("\n");
   if (lines.length === 1) return texLine(lines[0], bold);
   return "\\begin{array}{" + align + "}" +
-         lines.map(function(l){ return texLine(l, bold); }).join(" \\\\ ") +
+         lines.map(function(l){ return texLine(l, bold); }).join(" " + ROWSEP + " ") +
          "\\end{array}";
 }
 
@@ -422,7 +432,7 @@ function buildTex(oneLine){
     for (var c = 0; c < cols; c++){
       cells.push(texCell(row[c] === undefined ? "" : row[c], isHead, S.align[c]));
     }
-    var line = cells.join(" & ") + " \\\\";
+    var line = cells.join(" & ") + " " + ROWSEP;
     var rule = "";
     if (S.border === "all" || S.border === "rows") rule = " \\hline";
     else if (S.border === "head" && isHead) rule = " \\hline";
