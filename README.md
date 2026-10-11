@@ -2,8 +2,6 @@
 
 note の記事に貼れる表を作るツールです。HTML 1枚だけで動きます。
 
-**→ https://＜ユーザー名＞.github.io/note-table-builder/**
-
 ## これは何
 
 note の記事本文は Markdown ふうに書けますが、表の記法だけ通りません。
